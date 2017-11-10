@@ -1,47 +1,66 @@
-﻿import getAccessToken from './getAccessToken'
-import Profile from './Profile'
-import World from './World'
-import Request from './Request';
-import Activity from './Activity';
-
-const TOKEN_REFRESH_MS = 10 * 60 * 1000;
+﻿const getAccessToken = require('./getAccessToken')
+const Profile = require('./Profile')
+const World = require('./World')
+const Request = require('./Request')
+const Activity = require('./Activity')
 
 class ZwiftAccount {
+    constructor(username, password, refreshToken = null) {
+        this.username = username
+        this.password = password
 
-    constructor(username, password) {
-        this.username = username;
-        this.password = password;
+        this.tokenPromise = null
 
-        this.tokenPromise = null;
-        this.tokenDate = null;
+        this.accessToken = null
+        this.refreshToken = refreshToken
+        this.refreshTokenExpiration = 0
+        this.accessTokenExpiration = 0
 
         this.getAccessToken = this.getAccessToken.bind(this)
+        this.getRefreshToken = this.getRefreshToken.bind(this)
     }
 
     getProfile(playerId) {
-        return new Profile(playerId, this.getAccessToken);
+        return new Profile(playerId, this.getAccessToken)
     }
 
     getWorld(worldId) {
-        return new World(worldId, this.getAccessToken);
+        return new World(worldId, this.getAccessToken)
     }
 
     getActivity(playerId) {
-      return new Activity(playerId, this.getAccessToken);
+      return new Activity(playerId, this.getAccessToken)
     }
 
     getRequest() {
-        return new Request(this.getAccessToken);
+        return new Request(this.getAccessToken)
     }
 
     getAccessToken() {
-        if (!this.tokenPromise || (new Date().getTime() - this.tokenDate.getTime() > TOKEN_REFRESH_MS)) {
-            this.tokenDate = new Date();
-            this.tokenPromise = getAccessToken(this.username, this.password);
-        }
+        return this.getTokenPromise()
+            .then(response => response.data.access_token)
+    }
 
-        return this.tokenPromise;
+    getRefreshToken() {
+        return this.getTokenPromise()
+            .then(response => response.data.refresh_token)
+    }
+
+    getTokenPromise() {
+        if (!this.tokenPromise || (this.accessTokenExpiration && (new Date()).getTime() > this.accessTokenExpiration)) {
+            this.accessTokenExpiration = 0
+            this.tokenPromise = getAccessToken(this.username, this.password, this.refreshToken).then((response) => {
+                const now = new Date()
+                this.accessTokenExpiration = now.getTime() + ((response.data.expires_in - 5) * 1000)
+                this.refreshTokenExpiration  = now.getTime() + ((response.data.refresh_expires_in - 5) * 1000)
+                this.refreshToken = response.data.refresh_token
+                this.accessToken = response.data.access_token
+                return response
+            })
+        }
+        
+        return this.tokenPromise
     }
 }
 
-export default ZwiftAccount;
+module.exports = ZwiftAccount
